@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RifqyNotes | Intelligent Transcriber</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: '#0f1115',
+                        panel: '#16181d',
+                        accent: '#6366f1' // Indigo
+                    },
+                    animation: {
+                        'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-dark text-gray-200 font-sans h-screen flex overflow-hidden">
+
+    <aside class="w-72 bg-panel border-r border-gray-800 flex flex-col z-20">
+        <div class="h-16 flex items-center px-6 border-b border-gray-800">
+            <i data-lucide="mic" class="text-accent mr-2"></i>
+            <span class="font-bold text-lg tracking-tight text-white">RifqyNotes</span>
+        </div>
+
+        <div class="p-4">
+            <label class="flex items-center justify-center gap-2 w-full p-3 bg-gray-800 hover:bg-gray-700 rounded-xl cursor-pointer transition-all border border-gray-700 text-sm font-medium">
+                <i data-lucide="upload" size="16"></i>
+                Upload Audio File
+                <input type="file" id="fileInput" accept="audio/*" class="hidden">
+            </label>
+        </div>
+
+        <div class="flex-1 overflow-y-auto px-2">
+            <h3 class="text-xs font-bold text-gray-500 uppercase px-4 mb-2 mt-2">Riwayat</h3>
+            <div id="historyList" class="space-y-1">
+                </div>
+        </div>
+        
+        <div class="p-4 border-t border-gray-800">
+            <button onclick="clearHistory()" class="text-xs text-red-400 hover:text-red-300 flex items-center gap-2">
+                <i data-lucide="trash-2" size="14"></i> Bersihkan Riwayat
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col relative">
+        <header class="h-16 border-b border-gray-800 flex items-center justify-between px-8 bg-dark/90 backdrop-blur-md sticky top-0 z-10">
+            <div>
+                <h1 id="noteTitle" class="text-lg font-semibold">Catatan Baru</h1>
+                <p id="statusText" class="text-xs text-gray-500">Siap merekam...</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="px-2 py-1 rounded bg-green-500/10 text-green-400 text-xs border border-green-500/20 flex items-center gap-1">
+                    <i data-lucide="shield-check" size="12"></i> Local Encrypted
+                </span>
+            </div>
+        </header>
+
+        <div id="transcriptArea" class="flex-1 overflow-y-auto p-8 space-y-4 pb-32">
+            <p class="text-gray-500 italic text-sm">Tekan tombol mikrofon untuk mulai berbicara...</p>
+        </div>
+
+        <div class="absolute bottom-0 w-full p-6 bg-gradient-to-t from-dark via-dark to-transparent">
+            <div class="max-w-3xl mx-auto bg-panel rounded-2xl p-4 border border-gray-700/50 shadow-2xl flex items-center gap-6">
+                
+                <button id="recordBtn" class="w-14 h-14 rounded-full bg-accent hover:bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/30 transition-all">
+                    <i data-lucide="mic" class="text-white" id="micIcon"></i>
+                </button>
+
+                <div class="flex-1 h-12 flex items-center gap-1" id="visualizer">
+                    <span class="text-sm text-gray-500 ml-2">Klik Mic untuk mulai</span>
+                </div>
+
+                <div class="text-right hidden" id="timerArea">
+                    <div id="timer" class="text-xl font-mono font-bold text-white">00:00</div>
+                    <div class="text-xs text-green-400 animate-pulse">Live</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+  </html>
+  
