@@ -1,16 +1,43 @@
 let mediaRecorder;
 let audioChunks = [];
-let isRecording = false;
 let startTime;
 let timerInterval;
+let audioContext;
+let analyser;
+let dataArray;
+let source;
+let animationId;
 
+// --- DATABASE SETUP (IndexedDB) ---
+const DB_NAME = "RifqyNotesDB";
+const DB_VERSION = 1;
+let db;
+
+function initDB() {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = (e) => {
+        db = e.target.result;
+        if (!db.objectStoreNames.contains("recordings")) {
+            db.createObjectStore("recordings", { keyPath: "id" });
+        }
+    };
+    request.onsuccess = (e) => {
+        db = e.target.result;
+        loadRecordings();
+    };
+    request.onerror = (e) => console.error("DB Error:", e);
+}
+
+// --- LOGIKA PEREKAMAN ---
 const recordBtn = document.getElementById('recordBtn');
-const transcriptArea = document.getElementById('transcriptArea');
-const statusText = document.getElementById('statusText');
-const visualizer = document.getElementById('visualizer');
-const timerArea = document.getElementById('timerArea');
+const timerDisplay = document.getElementById('timer');
+const statusTitle = document.getElementById('statusTitle');
+const micIcon = document.getElementById('micIcon');
+const canvas = document.getElementById('visualizerCanvas');
+const canvasCtx = canvas.getContext('2d');
+const audioPlayer = document.getElementById('audioPlayer');
 
-// --- 1. LOGIKA PEREKAMAN ---
+let isRecording = false;
 
 recordBtn.addEventListener('click', async () => {
     if (!isRecording) {
@@ -23,21 +50,38 @@ recordBtn.addEventListener('click', async () => {
 async function startRecording() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
         
-        mediaRecorder.ondataavailable = (event) => {
-            if (event.data.size > 0) {
-                // Kirim potongan audio ke Backend Vercel
-                sendToVercel(event.data);
-            }
+        // Setup Visualizer
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
+        analyser.fftSize = 2048;
+        const bufferLength = analyser.frequencyBinCount;
+        dataArray = new Uint8Array(bufferLength);
+        drawVisualizer();
+
+        // Setup Recorder
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+        
+        mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            saveRecording(audioBlob);
+            
+            // Matikan stream & visualizer
+            stream.getTracks().forEach(track => track.stop());
+            cancelAnimationFrame(animationId);
+            canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
         };
 
-        // Potong audio setiap 5 detik (Continuous Mode)
-        mediaRecorder.start(5000); 
-
+        mediaRecorder.start();
         isRecording = true;
         updateUI(true);
         startTimer();
+
     } catch (err) {
         alert("Gagal akses mikrofon: " + err);
     }
@@ -45,143 +89,147 @@ async function startRecording() {
 
 function stopRecording() {
     mediaRecorder.stop();
-    // Matikan stream
-    mediaRecorder.stream.getTracks().forEach(track => track.stop());
-    
     isRecording = false;
     updateUI(false);
     clearInterval(timerInterval);
-    saveNoteToHistory(); // Simpan ke LocalStorage
 }
 
-// --- 2. KOMUNIKASI KE VERCEL ---
+// --- VISUALIZER ---
+function drawVisualizer() {
+    animationId = requestAnimationFrame(drawVisualizer);
+    analyser.getByteTimeDomainData(dataArray);
 
-async function sendToVercel(audioBlob) {
-    statusText.innerText = "Mengirim data ke AI...";
-    
-    const formData = new FormData();
-    // Ubah blob jadi file agar Python bisa baca
-    const file = new File([audioBlob], "recording.webm", { type: 'audio/webm' });
-    formData.append("file", file);
+    canvasCtx.fillStyle = '#0f111500'; // Transparan clearing
+    canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
-    try {
-        // Panggil API Vercel kita
-        const response = await fetch('/api/transcribe', {
-            method: 'POST',
-            body: formData
-        });
+    canvasCtx.lineWidth = 2;
+    canvasCtx.strokeStyle = '#3b82f6'; // Warna Acent (Blue)
+    canvasCtx.beginPath();
 
-        const data = await response.json();
-        
-        if (data.text) {
-            appendTranscript(data.text);
-            statusText.innerText = "Merekam...";
-        }
-    } catch (error) {
-        console.error("Error transkripsi:", error);
+    const sliceWidth = canvas.width * 1.0 / dataArray.length;
+    let x = 0;
+
+    for (let i = 0; i < dataArray.length; i++) {
+        const v = dataArray[i] / 128.0;
+        const y = v * canvas.height / 2;
+
+        if (i === 0) canvasCtx.moveTo(x, y);
+        else canvasCtx.lineTo(x, y);
+
+        x += sliceWidth;
     }
+
+    canvasCtx.lineTo(canvas.width, canvas.height / 2);
+    canvasCtx.stroke();
 }
 
-// --- 3. UI HELPER ---
-
-function appendTranscript(text) {
-    if(!text) return;
-    
-    const p = document.createElement('p');
-    p.className = "text-gray-300 leading-relaxed animate-pulse";
-    p.innerText = text;
-    
-    // Hapus placeholder jika ada
-    if(transcriptArea.querySelector('.italic')) {
-        transcriptArea.innerHTML = '';
-    }
-    
-    transcriptArea.appendChild(p);
-    // Scroll ke bawah
-    transcriptArea.scrollTop = transcriptArea.scrollHeight;
-    
-    // Hapus animasi pulse setelah sebentar
-    setTimeout(() => p.classList.remove('animate-pulse'), 1000);
-}
-
-function updateUI(recording) {
-    const micIcon = document.getElementById('micIcon');
-    if (recording) {
-        recordBtn.classList.replace('bg-accent', 'bg-red-500');
-        recordBtn.classList.replace('shadow-indigo-500/30', 'shadow-red-500/30');
-        micIcon.innerHTML = '<rect x="6" y="6" width="12" height="12" fill="white" />'; // Icon Stop
-        timerArea.classList.remove('hidden');
-        
-        // Buat fake visualizer
-        visualizer.innerHTML = '';
-        for(let i=0; i<15; i++) {
-            const bar = document.createElement('div');
-            bar.className = 'wave-bar';
-            bar.style.animationDelay = `${Math.random()}s`;
-            visualizer.appendChild(bar);
-        }
-    } else {
-        recordBtn.classList.replace('bg-red-500', 'bg-accent');
-        recordBtn.classList.replace('shadow-red-500/30', 'shadow-indigo-500/30');
-        micIcon.innerHTML = '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>'; // Icon Mic
-        timerArea.classList.add('hidden');
-        visualizer.innerHTML = '<span class="text-sm text-gray-500 ml-2">Transkripsi selesai.</span>';
-    }
-}
-
+// --- TIMER & UI ---
 function startTimer() {
     startTime = Date.now();
     timerInterval = setInterval(() => {
         const diff = Date.now() - startTime;
         const date = new Date(diff);
-        document.getElementById('timer').innerText = date.toISOString().substr(14, 5);
+        timerDisplay.innerText = date.toISOString().substr(14, 5);
     }, 1000);
 }
 
-// --- 4. HISTORY (LOCAL STORAGE) ---
-function saveNoteToHistory() {
-    const text = transcriptArea.innerText;
-    if(text.length < 10) return;
+function updateUI(recording) {
+    if (recording) {
+        recordBtn.className = "w-20 h-20 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg shadow-red-500/30 animate-pulse";
+        micIcon.innerHTML = '<rect x="6" y="6" width="12" height="12" fill="white" />'; // Icon Stop
+        statusTitle.innerText = "Merekam...";
+        audioPlayer.classList.add('hidden');
+    } else {
+        recordBtn.className = "w-20 h-20 rounded-full bg-accent hover:bg-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/30 transition-all hover:scale-105";
+        micIcon.innerHTML = '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>';
+        statusTitle.innerText = "Siap Merekam";
+        timerDisplay.innerText = "00:00";
+    }
+}
 
-    const note = {
+// --- DATABASE OPERATIONS ---
+function saveRecording(blob) {
+    const transaction = db.transaction(["recordings"], "readwrite");
+    const store = transaction.objectStore("recordings");
+    
+    const record = {
         id: Date.now(),
-        date: new Date().toLocaleString(),
-        text: text,
-        title: "Catatan " + new Date().toLocaleTimeString()
+        audio: blob,
+        date: new Date().toLocaleString()
     };
 
-    let history = JSON.parse(localStorage.getItem('rifqynotes_history') || '[]');
-    history.unshift(note);
-    localStorage.setItem('rifqynotes_history', JSON.stringify(history));
-    renderHistory();
+    store.add(record);
+    transaction.oncomplete = () => loadRecordings();
 }
 
-function renderHistory() {
+function loadRecordings() {
     const historyList = document.getElementById('historyList');
-    const history = JSON.parse(localStorage.getItem('rifqynotes_history') || '[]');
-    
     historyList.innerHTML = '';
-    history.forEach(item => {
-        const div = document.createElement('div');
-        div.className = "p-3 rounded-lg hover:bg-[#1f2229] cursor-pointer transition-colors mb-1 text-gray-300";
-        div.innerHTML = `
-            <div class="font-medium text-sm truncate">${item.title}</div>
-            <div class="text-xs text-gray-500">${item.date}</div>
-        `;
-        div.onclick = () => {
-            transcriptArea.innerText = item.text;
-            document.getElementById('noteTitle').innerText = item.title;
-        };
-        historyList.appendChild(div);
-    });
+
+    const transaction = db.transaction(["recordings"], "readonly");
+    const store = transaction.objectStore("recordings");
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+        const records = request.result.reverse(); // Terbaru di atas
+        
+        if (records.length === 0) {
+            historyList.innerHTML = '<p class="text-xs text-gray-600 px-4 text-center mt-4">Belum ada rekaman.</p>';
+            return;
+        }
+
+        records.forEach(item => {
+            const div = document.createElement('div');
+            div.className = "group flex items-center justify-between p-3 mx-2 rounded-lg hover:bg-gray-800 cursor-pointer transition-colors border border-transparent hover:border-gray-700";
+            div.innerHTML = `
+                <div class="flex items-center gap-3 overflow-hidden">
+                    <div class="p-2 rounded-full bg-blue-500/10 text-blue-400">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 5v14l11-7z"/></svg>
+                    </div>
+                    <div class="flex flex-col">
+                        <span class="text-sm font-medium text-gray-200">Rekaman Suara</span>
+                        <span class="text-xs text-gray-500">${item.date}</span>
+                    </div>
+                </div>
+                <button onclick="deleteRecording(${item.id}, event)" class="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-full transition">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+            `;
+            
+            // Play Audio saat klik item
+            div.onclick = (e) => {
+                if(e.target.closest('button')) return; // Jangan play kalau klik delete
+                const url = URL.createObjectURL(item.audio);
+                audioPlayer.src = url;
+                audioPlayer.classList.remove('hidden');
+                audioPlayer.play();
+                statusTitle.innerText = "Memutar Rekaman...";
+            };
+            
+            historyList.appendChild(div);
+        });
+    };
 }
 
-function clearHistory() {
-    localStorage.removeItem('rifqynotes_history');
-    renderHistory();
-    transcriptArea.innerHTML = '<p class="text-gray-500 italic text-sm">Tekan tombol mikrofon untuk mulai berbicara...</p>';
+function deleteRecording(id, event) {
+    event.stopPropagation();
+    if(confirm("Hapus rekaman ini?")) {
+        const transaction = db.transaction(["recordings"], "readwrite");
+        const store = transaction.objectStore("recordings");
+        store.delete(id);
+        transaction.oncomplete = () => loadRecordings();
+    }
 }
 
-// Init
-renderHistory();
-          
+function clearAllData() {
+    if(confirm("Hapus SEMUA riwayat rekaman?")) {
+        const transaction = db.transaction(["recordings"], "readwrite");
+        const store = transaction.objectStore("recordings");
+        store.clear();
+        transaction.oncomplete = () => loadRecordings();
+    }
+}
+
+// Jalankan Database
+initDB();
+lucide.createIcons();
