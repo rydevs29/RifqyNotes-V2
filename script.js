@@ -1,15 +1,14 @@
+// --- VARIABEL UTAMA ---
 let mediaRecorder;
 let audioChunks = [];
 let startTime;
 let timerInterval;
-let audioContext;
-let analyser;
-let dataArray;
-let source;
-let animationId;
+let audioContext, analyser, dataArray, source, animationId;
+let recognition; // Variabel untuk Speech-to-Text
+let finalTranscript = ""; // Menyimpan teks final
 
-// --- DATABASE SETUP (IndexedDB) ---
-const DB_NAME = "RifqyNotesDB";
+// --- SETUP DATABASE (IndexedDB) ---
+const DB_NAME = "RifqyNotesLiveDB";
 const DB_VERSION = 1;
 let db;
 
@@ -25,23 +24,64 @@ function initDB() {
         db = e.target.result;
         loadRecordings();
     };
-    request.onerror = (e) => console.error("DB Error:", e);
 }
 
-// --- LOGIKA PEREKAMAN ---
-const recordBtn = document.getElementById('recordBtn');
-const timerDisplay = document.getElementById('timer');
-const statusTitle = document.getElementById('statusTitle');
-const micIcon = document.getElementById('micIcon');
-const canvas = document.getElementById('visualizerCanvas');
-const canvasCtx = canvas.getContext('2d');
-const audioPlayer = document.getElementById('audioPlayer');
+// --- SETUP SPEECH RECOGNITION (BROWSER API) ---
+function setupSpeechRecognition() {
+    // Cek ketersediaan API (Chrome/Edge/Safari support)
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+        alert("Browser Anda tidak mendukung fitur Transkripsi Live. Gunakan Google Chrome atau Edge.");
+        return null;
+    }
 
+    const rec = new SpeechRecognition();
+    rec.continuous = true;      // Terus mendengarkan
+    rec.interimResults = true;  // Tampilkan hasil sementara (saat masih mikir)
+    rec.lang = 'id-ID';         // Bahasa Indonesia
+
+    rec.onresult = (event) => {
+        let interimTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+                finalTranscript += event.results[i][0].transcript + ". ";
+            } else {
+                interimTranscript += event.results[i][0].transcript;
+            }
+        }
+
+        // Update UI Teks
+        const liveText = document.getElementById('liveText');
+        liveText.innerHTML = `
+            <span class="text-white">${finalTranscript}</span>
+            <span class="text-gray-500 italic">${interimTranscript}</span>
+        `;
+        
+        // Auto Scroll ke bawah
+        const container = document.getElementById('transcriptContainer');
+        container.scrollTop = container.scrollHeight;
+    };
+
+    rec.onerror = (event) => {
+        console.error("Speech Error:", event.error);
+    };
+
+    return rec;
+}
+
+// --- LOGIKA TOMBOL & PEREKAMAN ---
+const recordBtn = document.getElementById('recordBtn');
+const liveTextDiv = document.getElementById('liveText');
 let isRecording = false;
+
+// Inisialisasi Speech Engine
+recognition = setupSpeechRecognition();
 
 recordBtn.addEventListener('click', async () => {
     if (!isRecording) {
-        startRecording();
+        await startRecording();
     } else {
         stopRecording();
     }
@@ -50,111 +90,106 @@ recordBtn.addEventListener('click', async () => {
 async function startRecording() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
-        // Setup Visualizer
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioContext.createAnalyser();
-        source = audioContext.createMediaStreamSource(stream);
-        source.connect(analyser);
-        analyser.fftSize = 2048;
-        const bufferLength = analyser.frequencyBinCount;
-        dataArray = new Uint8Array(bufferLength);
-        drawVisualizer();
 
-        // Setup Recorder
+        // 1. Setup Visualizer
+        setupVisualizer(stream);
+
+        // 2. Setup Audio Recorder
         mediaRecorder = new MediaRecorder(stream);
         audioChunks = [];
-
         mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
         
         mediaRecorder.onstop = () => {
             const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-            saveRecording(audioBlob);
+            // Simpan Audio + Teks Transkrip ke DB
+            saveRecording(audioBlob, finalTranscript);
             
-            // Matikan stream & visualizer
+            // Cleanup
             stream.getTracks().forEach(track => track.stop());
             cancelAnimationFrame(animationId);
-            canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+            const canvas = document.getElementById('visualizerCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
         };
 
+        // 3. Mulai Semuanya
         mediaRecorder.start();
+        if (recognition) {
+            finalTranscript = ""; // Reset teks lama
+            liveTextDiv.innerHTML = ""; // Bersihkan layar
+            recognition.start();
+        }
+
         isRecording = true;
         updateUI(true);
         startTimer();
 
     } catch (err) {
         alert("Gagal akses mikrofon: " + err);
+        console.error(err);
     }
 }
 
 function stopRecording() {
     mediaRecorder.stop();
+    if (recognition) recognition.stop();
+    
     isRecording = false;
     updateUI(false);
     clearInterval(timerInterval);
 }
 
 // --- VISUALIZER ---
+function setupVisualizer(stream) {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioContext.createAnalyser();
+    source = audioContext.createMediaStreamSource(stream);
+    source.connect(analyser);
+    analyser.fftSize = 256;
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+    drawVisualizer();
+}
+
 function drawVisualizer() {
+    const canvas = document.getElementById('visualizerCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Resize canvas agar tajam di HP
+    canvas.width = canvas.offsetWidth; 
+    canvas.height = canvas.offsetHeight;
+
     animationId = requestAnimationFrame(drawVisualizer);
-    analyser.getByteTimeDomainData(dataArray);
+    analyser.getByteFrequencyData(dataArray);
 
-    canvasCtx.fillStyle = '#0f111500'; // Transparan clearing
-    canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
-
-    canvasCtx.lineWidth = 2;
-    canvasCtx.strokeStyle = '#3b82f6'; // Warna Acent (Blue)
-    canvasCtx.beginPath();
-
-    const sliceWidth = canvas.width * 1.0 / dataArray.length;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    const barWidth = (canvas.width / dataArray.length) * 2.5;
     let x = 0;
 
-    for (let i = 0; i < dataArray.length; i++) {
-        const v = dataArray[i] / 128.0;
-        const y = v * canvas.height / 2;
+    for(let i = 0; i < dataArray.length; i++) {
+        const barHeight = (dataArray[i] / 255) * canvas.height;
+        
+        // Warna Gradient Visualizer
+        const gradient = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - barHeight);
+        gradient.addColorStop(0, '#3b82f6');
+        gradient.addColorStop(1, '#60a5fa');
 
-        if (i === 0) canvasCtx.moveTo(x, y);
-        else canvasCtx.lineTo(x, y);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
 
-        x += sliceWidth;
-    }
-
-    canvasCtx.lineTo(canvas.width, canvas.height / 2);
-    canvasCtx.stroke();
-}
-
-// --- TIMER & UI ---
-function startTimer() {
-    startTime = Date.now();
-    timerInterval = setInterval(() => {
-        const diff = Date.now() - startTime;
-        const date = new Date(diff);
-        timerDisplay.innerText = date.toISOString().substr(14, 5);
-    }, 1000);
-}
-
-function updateUI(recording) {
-    if (recording) {
-        recordBtn.className = "w-20 h-20 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg shadow-red-500/30 animate-pulse";
-        micIcon.innerHTML = '<rect x="6" y="6" width="12" height="12" fill="white" />'; // Icon Stop
-        statusTitle.innerText = "Merekam...";
-        audioPlayer.classList.add('hidden');
-    } else {
-        recordBtn.className = "w-20 h-20 rounded-full bg-accent hover:bg-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/30 transition-all hover:scale-105";
-        micIcon.innerHTML = '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>';
-        statusTitle.innerText = "Siap Merekam";
-        timerDisplay.innerText = "00:00";
+        x += barWidth + 2;
     }
 }
 
-// --- DATABASE OPERATIONS ---
-function saveRecording(blob) {
+// --- DATABASE & HISTORY ---
+function saveRecording(blob, text) {
     const transaction = db.transaction(["recordings"], "readwrite");
     const store = transaction.objectStore("recordings");
     
     const record = {
         id: Date.now(),
         audio: blob,
+        transcript: text || "(Tidak ada teks terdeteksi)",
         date: new Date().toLocaleString()
     };
 
@@ -163,73 +198,106 @@ function saveRecording(blob) {
 }
 
 function loadRecordings() {
-    const historyList = document.getElementById('historyList');
-    historyList.innerHTML = '';
-
+    const list = document.getElementById('historyList');
+    list.innerHTML = '';
     const transaction = db.transaction(["recordings"], "readonly");
     const store = transaction.objectStore("recordings");
     const request = store.getAll();
 
     request.onsuccess = () => {
-        const records = request.result.reverse(); // Terbaru di atas
-        
+        const records = request.result.reverse();
         if (records.length === 0) {
-            historyList.innerHTML = '<p class="text-xs text-gray-600 px-4 text-center mt-4">Belum ada rekaman.</p>';
+            list.innerHTML = '<p class="text-xs text-center text-gray-500 mt-4">Belum ada riwayat.</p>';
             return;
         }
 
         records.forEach(item => {
             const div = document.createElement('div');
-            div.className = "group flex items-center justify-between p-3 mx-2 rounded-lg hover:bg-gray-800 cursor-pointer transition-colors border border-transparent hover:border-gray-700";
+            div.className = "p-3 bg-[#1f2229] hover:bg-[#2a2d36] rounded-xl cursor-pointer transition border border-transparent hover:border-gray-700 group";
             div.innerHTML = `
-                <div class="flex items-center gap-3 overflow-hidden">
-                    <div class="p-2 rounded-full bg-blue-500/10 text-blue-400">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 5v14l11-7z"/></svg>
-                    </div>
-                    <div class="flex flex-col">
-                        <span class="text-sm font-medium text-gray-200">Rekaman Suara</span>
-                        <span class="text-xs text-gray-500">${item.date}</span>
-                    </div>
+                <div class="flex justify-between items-start mb-2">
+                    <span class="text-xs text-blue-400 font-bold">${item.date}</span>
+                    <button onclick="deleteRecording(${item.id}, event)" class="text-gray-600 hover:text-red-400">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
                 </div>
-                <button onclick="deleteRecording(${item.id}, event)" class="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-full transition">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                </button>
+                <p class="text-sm text-gray-300 line-clamp-2 leading-relaxed">${item.transcript}</p>
             `;
             
-            // Play Audio saat klik item
             div.onclick = (e) => {
-                if(e.target.closest('button')) return; // Jangan play kalau klik delete
+                if(e.target.closest('button')) return;
+                // Play Audio
                 const url = URL.createObjectURL(item.audio);
-                audioPlayer.src = url;
-                audioPlayer.classList.remove('hidden');
-                audioPlayer.play();
-                statusTitle.innerText = "Memutar Rekaman...";
+                const player = document.getElementById('audioPlayer');
+                player.src = url;
+                player.classList.remove('hidden');
+                player.play();
+                
+                // Tampilkan Teks Riwayat
+                document.getElementById('liveText').innerHTML = `<span class="text-white">${item.transcript}</span>`;
+                // Close sidebar di HP jika klik
+                if(window.innerWidth < 768) toggleSidebar();
             };
-            
-            historyList.appendChild(div);
+            list.appendChild(div);
         });
     };
 }
 
-function deleteRecording(id, event) {
-    event.stopPropagation();
-    if(confirm("Hapus rekaman ini?")) {
-        const transaction = db.transaction(["recordings"], "readwrite");
-        const store = transaction.objectStore("recordings");
-        store.delete(id);
-        transaction.oncomplete = () => loadRecordings();
+function deleteRecording(id, e) {
+    e.stopPropagation();
+    if(confirm("Hapus catatan ini?")) {
+        const tx = db.transaction(["recordings"], "readwrite");
+        tx.objectStore("recordings").delete(id);
+        tx.oncomplete = () => loadRecordings();
     }
 }
 
 function clearAllData() {
-    if(confirm("Hapus SEMUA riwayat rekaman?")) {
-        const transaction = db.transaction(["recordings"], "readwrite");
-        const store = transaction.objectStore("recordings");
-        store.clear();
-        transaction.oncomplete = () => loadRecordings();
+    if(confirm("Hapus SEMUA riwayat?")) {
+        const tx = db.transaction(["recordings"], "readwrite");
+        tx.objectStore("recordings").clear();
+        tx.oncomplete = () => loadRecordings();
     }
 }
 
-// Jalankan Database
+// --- UI HELPER ---
+function startTimer() {
+    startTime = Date.now();
+    timerInterval = setInterval(() => {
+        const diff = Date.now() - startTime;
+        const date = new Date(diff);
+        document.getElementById('timer').innerText = date.toISOString().substr(14, 5);
+    }, 1000);
+}
+
+function updateUI(recording) {
+    const btn = document.getElementById('recordBtn');
+    const icon = document.getElementById('micIcon');
+    const status = document.getElementById('statusTitle');
+
+    if (recording) {
+        btn.classList.replace('bg-accent', 'bg-red-500');
+        btn.classList.replace('shadow-blue-500/40', 'shadow-red-500/40');
+        btn.classList.add('animate-pulse');
+        icon.innerHTML = '<rect x="6" y="6" width="12" height="12" fill="white" />';
+        status.innerText = "Mendengarkan...";
+        status.classList.add('text-red-400');
+    } else {
+        btn.classList.replace('bg-red-500', 'bg-accent');
+        btn.classList.replace('shadow-red-500/40', 'shadow-blue-500/40');
+        btn.classList.remove('animate-pulse');
+        icon.innerHTML = '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>';
+        status.innerText = "Siap Merekam";
+        status.classList.remove('text-red-400');
+    }
+}
+
+// Toggle Sidebar untuk HP
+function toggleSidebar() {
+    const sb = document.getElementById('sidebar');
+    sb.classList.toggle('-translate-x-full');
+}
+
+// Init
 initDB();
 lucide.createIcons();
