@@ -6,32 +6,7 @@
     <title>RifqyMeeting.AI</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: white; -webkit-tap-highlight-color: transparent; }
-        
-        /* Animasi */
-        .recording-pulse { animation: pulse-red 1.5s infinite; }
-        @keyframes pulse-red {
-            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-            70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-        }
-        .animate-fade-in { animation: fadeIn 0.5s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
-        /* UI Elements */
-        .select-wrapper { position: relative; }
-        .select-wrapper select { padding-left: 2.5rem; padding-right: 2.5rem; appearance: none; -webkit-appearance: none; }
-        .icon-left { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; }
-        .icon-right { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; }
-        .toggle-checkbox:checked { right: 0; border-color: #3b82f6; }
-        .toggle-checkbox:checked + .toggle-label { background-color: #3b82f6; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        
-        /* Drag n Drop Upload */
-        .drop-zone { border: 2px dashed #475569; transition: all 0.3s; }
-        .drop-zone.dragover { border-color: #3b82f6; background-color: rgba(59, 130, 246, 0.1); }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body class="bg-slate-900 h-screen flex flex-col overflow-hidden">
 
@@ -48,9 +23,7 @@
     <main id="mainContainer" class="flex-1 overflow-y-auto no-scrollbar pb-24 relative">
         
         <section id="page-home" class="p-4 block animate-fade-in">
-            
             <div class="bg-slate-800 rounded-2xl p-1 shadow-xl border border-slate-700">
-                
                 <div class="flex bg-slate-900 rounded-xl p-1 mb-4">
                     <button onclick="switchMode('inperson')" id="tab-inperson" class="flex-1 py-2 text-sm font-medium bg-blue-600 rounded-lg text-white shadow transition-all">In-person</button>
                     <button onclick="switchMode('online')" id="tab-online" class="flex-1 py-2 text-sm font-medium text-slate-400 hover:text-white transition-all">Online</button>
@@ -58,7 +31,6 @@
                 </div>
 
                 <div class="px-3 pb-4">
-                    
                     <div class="select-wrapper mb-4">
                         <div class="icon-left text-blue-400"><i class="fa-solid fa-globe"></i></div>
                         <select id="langSelect" class="w-full bg-slate-700 text-white text-sm rounded-lg p-3 border border-slate-600 focus:outline-none focus:border-blue-500 cursor-pointer">
@@ -100,15 +72,13 @@
                             <div class="flex gap-2 mb-3">
                                 <span class="bg-slate-700 px-3 py-1 rounded-lg text-xs border border-slate-600"><i class="fa-brands fa-google text-green-400"></i> Meet</span>
                                 <span class="bg-slate-700 px-3 py-1 rounded-lg text-xs border border-slate-600"><i class="fa-solid fa-video text-blue-400"></i> Zoom</span>
-                                <span class="bg-slate-700 px-3 py-1 rounded-lg text-xs border border-slate-600"><i class="fa-brands fa-microsoft text-purple-400"></i> Teams</span>
                             </div>
-                            <label class="text-xs text-slate-400 mb-1 block">Paste Link Meeting Disini:</label>
-                            <input type="url" id="meetingLink" placeholder="https://meet.google.com/..." class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-sm text-white focus:border-blue-500 focus:outline-none mb-2">
-                            <p class="text-[10px] text-yellow-500"><i class="fa-solid fa-triangle-exclamation"></i> Tips: Gunakan speaker keras agar mic bisa menangkap suara peserta lain.</p>
+                            <input type="url" id="meetingLink" placeholder="Paste Link Meeting..." class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-sm text-white focus:border-blue-500 focus:outline-none mb-2">
+                            <p class="text-[10px] text-yellow-500">Tips: Gunakan speaker keras agar mic menangkap suara.</p>
                         </div>
                         <button onclick="openLinkAndRecord()" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-4 rounded-xl shadow-lg transition-all flex flex-col justify-center items-center gap-1 active:scale-95">
                             <i class="fa-solid fa-arrow-up-right-from-square text-xl"></i>
-                            <span class="text-sm">Buka Meeting & Rekam</span>
+                            <span class="text-sm">Buka & Rekam</span>
                         </button>
                     </div>
 
@@ -116,49 +86,34 @@
                         <div class="drop-zone bg-slate-700/30 rounded-xl p-6 text-center mb-4 relative" id="dropArea">
                             <input type="file" id="fileInput" accept="audio/*,video/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
                             <i class="fa-solid fa-cloud-arrow-up text-3xl text-slate-400 mb-2"></i>
-                            <p class="text-sm font-bold text-slate-300">Tap atau Drag file audio</p>
-                            <p class="text-[10px] text-slate-500">MP3, WAV, M4A (Maks 100MB)</p>
+                            <p class="text-sm font-bold text-slate-300">Tap / Drag audio</p>
                         </div>
-                        
                         <div id="uploadProgress" class="hidden mb-4">
-                            <div class="flex justify-between text-xs mb-1">
-                                <span class="text-blue-400">Mengupload & Memproses AI...</span>
-                                <span id="progressPercent">0%</span>
-                            </div>
-                            <div class="w-full bg-slate-700 rounded-full h-2.5">
-                                <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
-                            </div>
+                            <div class="flex justify-between text-xs mb-1"><span class="text-blue-400">Processing...</span><span id="progressPercent">0%</span></div>
+                            <div class="w-full bg-slate-700 rounded-full h-2.5"><div id="progressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div></div>
                         </div>
-
                         <button onclick="startUploadSimulation()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 rounded-xl shadow-lg transition-all flex flex-col justify-center items-center gap-1 active:scale-95">
-                            <i class="fa-solid fa-wand-magic-sparkles text-xl"></i>
-                            <span class="text-sm">Transkrip File (AI)</span>
+                            <i class="fa-solid fa-wand-magic-sparkles text-xl"></i><span class="text-sm">Transkrip File</span>
                         </button>
                     </div>
-
                 </div>
             </div>
 
             <div id="transcriptArea" class="hidden mt-4 bg-slate-800/90 backdrop-blur rounded-xl p-4 border border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.2)]">
                 <div class="flex justify-between items-center mb-2 border-b border-slate-700 pb-2">
-                    <h3 class="text-xs font-bold text-red-400 animate-pulse flex items-center gap-2">
-                        <span class="w-2 h-2 bg-red-500 rounded-full"></span> REC
-                    </h3>
+                    <h3 class="text-xs font-bold text-red-400 animate-pulse flex items-center gap-2"><span class="w-2 h-2 bg-red-500 rounded-full"></span> REC</h3>
                     <span id="timer" class="text-xs font-mono text-slate-300">00:00</span>
                 </div>
                 <div class="max-h-64 overflow-y-auto pr-2 custom-scroll">
                     <p id="transcriptText" class="text-white text-base font-medium leading-relaxed whitespace-pre-wrap">Mendengarkan...</p>
                 </div>
             </div>
-            
         </section>
 
         <section id="page-notes" class="hidden p-4 min-h-full">
-            <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
-                <i class="fa-solid fa-book-open text-blue-500"></i> Riwayat Catatan
-            </h2>
+            <h2 class="text-xl font-bold mb-4 flex items-center gap-2"><i class="fa-solid fa-book-open text-blue-500"></i> Riwayat Catatan</h2>
             <div id="notesContainer" class="space-y-3 pb-20"></div>
-            <button onclick="clearAllNotes()" class="mt-8 w-full py-2 text-xs text-red-400 border border-red-900 rounded-lg hover:bg-red-900/20">Hapus Semua Riwayat</button>
+            <button onclick="clearAllNotes()" class="mt-8 w-full py-2 text-xs text-red-400 border border-red-900 rounded-lg hover:bg-red-900/20">Hapus Semua</button>
         </section>
 
         <section id="page-profile" class="hidden p-4">
@@ -172,16 +127,13 @@
                     <p class="text-blue-400 text-sm">RifqyMeeting Pro</p>
                     <div class="grid grid-cols-3 gap-2 mt-6">
                         <div class="bg-slate-900 p-2 rounded-lg border border-slate-700">
-                            <div class="text-lg font-bold text-white" id="stat-count">0</div>
-                            <div class="text-[10px] text-slate-400">Rapat</div>
+                            <div class="text-lg font-bold text-white" id="stat-count">0</div><div class="text-[10px] text-slate-400">Rapat</div>
                         </div>
                         <div class="bg-slate-900 p-2 rounded-lg border border-slate-700">
-                            <div class="text-lg font-bold text-yellow-400">UNL</div>
-                            <div class="text-[10px] text-slate-400">Kredit</div>
+                            <div class="text-lg font-bold text-yellow-400">UNL</div><div class="text-[10px] text-slate-400">Kredit</div>
                         </div>
                         <div class="bg-slate-900 p-2 rounded-lg border border-slate-700">
-                            <div class="text-lg font-bold text-green-400">On</div>
-                            <div class="text-[10px] text-slate-400">Status</div>
+                            <div class="text-lg font-bold text-green-400">On</div><div class="text-[10px] text-slate-400">Status</div>
                         </div>
                     </div>
                 </div>
@@ -190,152 +142,13 @@
     </main>
 
     <nav class="fixed bottom-0 w-full bg-slate-900/90 backdrop-blur-md border-t border-slate-800 p-2 flex justify-around items-center z-50 h-16">
-        <div onclick="switchPage('home')" id="nav-home" class="nav-item active flex flex-col items-center gap-1 cursor-pointer w-16 transition-colors">
-            <i class="fa-solid fa-house text-lg"></i><span class="text-[10px]">Beranda</span>
-        </div>
-        <div onclick="switchPage('notes')" id="nav-notes" class="nav-item text-slate-500 flex flex-col items-center gap-1 cursor-pointer w-16 transition-colors">
-            <i class="fa-solid fa-note-sticky text-lg"></i><span class="text-[10px]">Catatan</span>
-        </div>
-        <div onclick="switchPage('profile')" id="nav-profile" class="nav-item text-slate-500 flex flex-col items-center gap-1 cursor-pointer w-16 transition-colors">
-            <i class="fa-solid fa-user text-lg"></i><span class="text-[10px]">Profil</span>
-        </div>
+        <div onclick="switchPage('home')" id="nav-home" class="nav-item active flex flex-col items-center gap-1 cursor-pointer w-16 transition-colors"><i class="fa-solid fa-house text-lg"></i><span class="text-[10px]">Beranda</span></div>
+        <div onclick="switchPage('notes')" id="nav-notes" class="nav-item text-slate-500 flex flex-col items-center gap-1 cursor-pointer w-16 transition-colors"><i class="fa-solid fa-note-sticky text-lg"></i><span class="text-[10px]">Catatan</span></div>
+        <div onclick="switchPage('profile')" id="nav-profile" class="nav-item text-slate-500 flex flex-col items-center gap-1 cursor-pointer w-16 transition-colors"><i class="fa-solid fa-user text-lg"></i><span class="text-[10px]">Profil</span></div>
     </nav>
 
-    <script>
-        // --- VARIABLES ---
-        let recognition;
-        let isRecording = false;
-        let shouldContinue = false; // "Anti-Mati" Flag
-        
-        // VARIABEL SAKTI: Penampung teks global agar tidak terpisah-pisah
-        let globalTranscript = ""; 
-        let tempTranscript = ""; // Penampung sementara (interim)
-
-        let seconds = 0;
-        let timerInterval;
-
-        // Elements
-        const btnRecord = document.getElementById('btnRecord');
-        const btnText = document.getElementById('btnText');
-        const transcriptArea = document.getElementById('transcriptArea');
-        const transcriptText = document.getElementById('transcriptText');
-        const langSelect = document.getElementById('langSelect');
-        const timerDisplay = document.getElementById('timer');
-
-        document.addEventListener('DOMContentLoaded', () => {
-            renderNotes();
-            updateProfileStats();
-            initSpeech();
-        });
-
-        // --- TAB & PAGE LOGIC ---
-        function switchPage(pageName) {
-            ['home', 'notes', 'profile'].forEach(p => {
-                document.getElementById('page-' + p).classList.add('hidden');
-                document.getElementById('nav-' + p).classList.remove('active', 'text-blue-500');
-                document.getElementById('nav-' + p).classList.add('text-slate-500');
-            });
-            document.getElementById('page-' + pageName).classList.remove('hidden');
-            const activeNav = document.getElementById('nav-' + pageName);
-            activeNav.classList.add('active', 'text-blue-500');
-            activeNav.classList.remove('text-slate-500');
-            if(pageName === 'notes') renderNotes();
-        }
-
-        function switchMode(mode) {
-            // Style Button Tabs
-            ['inperson', 'online', 'upload'].forEach(m => {
-                const btn = document.getElementById('tab-' + m);
-                const content = document.getElementById('content-' + m);
-                
-                if (m === mode) {
-                    btn.classList.remove('text-slate-400', 'bg-transparent');
-                    btn.classList.add('bg-blue-600', 'text-white', 'shadow');
-                    content.classList.remove('hidden');
-                } else {
-                    btn.classList.add('text-slate-400', 'bg-transparent');
-                    btn.classList.remove('bg-blue-600', 'text-white', 'shadow');
-                    content.classList.add('hidden');
-                }
-            });
-        }
-
-        // --- ONLINE MODE LOGIC ---
-        function openLinkAndRecord() {
-            const link = document.getElementById('meetingLink').value;
-            if(!link) return alert("Tempel link meeting dulu, baru gas!");
-            
-            // Buka link di tab baru
-            window.open(link, '_blank');
-
-            // Langsung mulai rekam (Simulasi mendengarkan speaker)
-            setTimeout(() => {
-               alert("Membuka Meeting... Pastikan kembali ke tab ini agar perekaman berjalan!");
-               startRecordingLogic();
-            }, 1000);
-        }
-
-        // --- UPLOAD MODE LOGIC ---
-        function startUploadSimulation() {
-            const file = document.getElementById('fileInput').files[0];
-            if(!file) return alert("Pilih file audio dulu!");
-
-            const progressDiv = document.getElementById('uploadProgress');
-            const progressBar = document.getElementById('progressBar');
-            const progressPercent = document.getElementById('progressPercent');
-
-            progressDiv.classList.remove('hidden');
-            let width = 0;
-            const interval = setInterval(() => {
-                if (width >= 100) {
-                    clearInterval(interval);
-                    alert("⚠️ INFO TEKNIS: Karena website ini statis (GitHub Pages), transkripsi file audio memerlukan Server Backend. Ini hanya simulasi UI.");
-                    progressDiv.classList.add('hidden');
-                } else {
-                    width++;
-                    progressBar.style.width = width + '%';
-                    progressPercent.innerText = width + '%';
-                }
-            }, 50); // Kecepatan simulasi
-        }
-
-        // --- SPEECH RECOGNITION (THE FIX) ---
-        function initSpeech() {
-            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                recognition = new SpeechRecognition();
-                recognition.continuous = true; 
-                recognition.interimResults = true;
-
-                recognition.onresult = (event) => {
-                    tempTranscript = ""; // Reset interim
-                    
-                    for (let i = event.resultIndex; i < event.results.length; ++i) {
-                        if (event.results[i].isFinal) {
-                            // SAAT FINAL: Tambahkan ke GLOBAL, jangan reset global!
-                            globalTranscript += event.results[i][0].transcript + " "; 
-                        } else {
-                            tempTranscript += event.results[i][0].transcript;
-                        }
-                    }
-                    
-                    // TAMPILKAN GABUNGAN (Global + Sedang diketik)
-                    transcriptText.innerText = globalTranscript + tempTranscript;
-                    
-                    // Auto scroll ke bawah
-                    const area = document.querySelector('#transcriptArea .custom-scroll');
-                    if(area) area.scrollTop = area.scrollHeight;
-                };
-
-                recognition.onerror = (event) => {
-                    console.error("Speech Error:", event.error);
-                };
-
-                // LOGIKA ANTI-MATI
-                recognition.onend = () => {
-                    if (shouldContinue) {
-                        console.log("Mic mati sendiri, menghidupkan kembali...");
-                        try { recognition.start(); } catch(e) {}
-                    } else {
-                        stopUI();
-         
+    <script src="modes.js"></script>
+    <script src="script.js"></script>
+</body>
+                                                                                                                                                                           </html>
+    
